@@ -14,23 +14,36 @@ export const ENEMY_TYPES = {
   MINIBOSS: "miniboss"
 };
 
+export const PALETTE = {
+  BG_BASE: "#0f0f14",
+  BG_CENTER: "#101822",
+  BG_EDGE: "#0a0a12",
+  PLAYER: "#00f5ff",
+  ENEMY: "#ff2a4d",
+  PURPLE: "#a855f7",
+  HP: "#00eaff",
+  WHITE: "#f4fbff"
+};
+
 export const CONFIG = {
   CANVAS: {
     WIDTH: 1280,
     HEIGHT: 720,
-    BACKGROUND: "#0f0f14"
+    MAX_DPR: 2,
+    BACKGROUND: PALETTE.BG_BASE
   },
   WORLD: {
     GRID_SIZE: 64,
-    GRID_ALPHA: 0.13,
-    GRID_LINE_WIDTH: 1
+    GRID_ALPHA: 0.09,
+    GRID_LINE_WIDTH: 0.7,
+    VIGNETTE_OPACITY: 0.45
   },
   TIMING: {
     MAX_DT: 0.05,
     WAVE_CLEAR_DELAY: 1.2,
     WAVE_INTRO_DURATION: 1.6,
     DAMAGE_FLASH_DURATION: 0.2,
-    SHAKE_DAMPING: 12
+    SHAKE_DAMPING: 55
   },
   TIME_CONTROL: {
     STATIONARY_THRESHOLD: 18,
@@ -57,7 +70,8 @@ export const CONFIG = {
     BULLET_RADIUS: 4,
     BULLET_LIFETIME: 1.4,
     TRAIL_LIFETIME: 0.22,
-    TRAIL_SPAWN_INTERVAL: 0.018
+    TRAIL_SPAWN_INTERVAL: 0.018,
+    MOTION_BLUR_POINTS: 5
   },
   ENEMIES: {
     [ENEMY_TYPES.CHASER]: {
@@ -137,8 +151,10 @@ export const CONFIG = {
     TRAIL_COUNT: 1
   },
   CAMERA: {
-    DAMAGE_SHAKE: 8,
-    HIT_SHAKE: 3
+    DAMAGE_SHAKE: 3.8,
+    HIT_SHAKE: 1.6,
+    MAX_SHAKE: 6,
+    SHAKE_DURATION: 0.11
   },
   SCORING: {
     COMBO_TIMEOUT: 2,
@@ -146,48 +162,64 @@ export const CONFIG = {
     COMBO_DAMAGE_RESET: true
   },
   UI: {
-    FONT_FAMILY: "'Rajdhani', sans-serif",
-    HUD_GLOW: "rgba(0, 217, 255, 0.85)",
-    ALERT_GLOW: "rgba(255, 52, 86, 0.9)",
-    WAVE_GLOW: "rgba(202, 88, 255, 0.95)",
-    TRANSITION_SPEED: 10
+    FONT_FAMILY: "'Inter', sans-serif",
+    HUD_GLOW: "rgba(0, 245, 255, 0.75)",
+    ALERT_GLOW: "rgba(255, 42, 77, 0.82)",
+    WAVE_GLOW: "rgba(168, 85, 247, 0.9)",
+    TRANSITION_SPEED: 10,
+    LETTER_SPACING: 1.8
+  },
+  VISUAL: {
+    PLAYER_GLOW: 26,
+    PLAYER_CORE_GLOW: 14,
+    ENEMY_GLOW: 13,
+    ENEMY_MINIBOSS_GLOW: 26,
+    PLAYER_BULLET_GLOW: 13,
+    ENEMY_BULLET_GLOW: 9,
+    HUD_TEXT_GLOW: 10
   },
   UPGRADES: {
     DOUBLE_SHOT: {
       id: "double_shot",
       title: "Double Shot",
       description: "Fire two rounds with a narrow spread.",
-      accent: "#1cd9ff"
+      accent: PALETTE.PLAYER,
+      icon: "split"
     },
     PIERCING: {
       id: "piercing",
       title: "Piercing Bullets",
       description: "Bullets pass through one extra target.",
-      accent: "#45f5ff"
+      accent: PALETTE.PLAYER,
+      icon: "pierce"
     },
     DASH_COOLDOWN: {
       id: "dash_cooldown",
       title: "Fast Dash",
       description: "Reduce dash cooldown by 18%.",
-      accent: "#ff4fd0"
+      accent: PALETTE.PURPLE,
+      icon: "dash"
     },
     TIME_SLOW: {
       id: "time_slow",
       title: "Stillpoint Core",
       description: "Standing still slows the world even more.",
-      accent: "#8f7cff"
+      accent: PALETTE.PURPLE,
+      icon: "time"
     },
     BULLET_SPEED: {
       id: "bullet_speed",
       title: "Bullet Speed Up",
       description: "Increase bullet velocity by 18%.",
-      accent: "#5ad9ff"
+      accent: PALETTE.PLAYER,
+      icon: "speed"
     },
     COMBO_AMPLIFIER: {
       id: "combo_amp",
       title: "Combo Amplifier",
       description: "Increase combo multiplier growth.",
-      accent: "#ff7df4"
+      accent: PALETTE.PURPLE,
+      icon: "combo"
     }
   }
 };

@@ -9,6 +9,9 @@ export class Input {
     this.mouseButtonsPressed = new Set();
     this.mouse = { x: 0, y: 0 };
 
+    this.logicalWidth = canvas.clientWidth || canvas.width || 1;
+    this.logicalHeight = canvas.clientHeight || canvas.height || 1;
+
     this.onKeyDown = this.onKeyDown.bind(this);
     this.onKeyUp = this.onKeyUp.bind(this);
     this.onMouseMove = this.onMouseMove.bind(this);
@@ -23,6 +26,11 @@ export class Input {
     canvas.addEventListener("mousedown", this.onMouseDown);
     window.addEventListener("mouseup", this.onMouseUp);
     canvas.addEventListener("contextmenu", (event) => event.preventDefault());
+  }
+
+  setLogicalSize(width, height) {
+    this.logicalWidth = Math.max(1, width);
+    this.logicalHeight = Math.max(1, height);
   }
 
   destroy() {
@@ -58,8 +66,8 @@ export class Input {
 
   onMouseMove(event) {
     const rect = this.canvas.getBoundingClientRect();
-    const sx = this.canvas.width / rect.width;
-    const sy = this.canvas.height / rect.height;
+    const sx = this.logicalWidth / rect.width;
+    const sy = this.logicalHeight / rect.height;
     this.mouse.x = (event.clientX - rect.left) * sx;
     this.mouse.y = (event.clientY - rect.top) * sy;
   }

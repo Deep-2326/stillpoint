@@ -1,6 +1,20 @@
-import { CONFIG } from "../config.js";
+import { CONFIG, PALETTE } from "../config.js";
 import { Particle } from "../entities/Particle.js";
 import { randomRange, vectorFromAngle } from "../utils.js";
+
+function pickShape(shapeMix) {
+  const dotWeight = shapeMix.dot ?? 0;
+  const sparkWeight = shapeMix.spark ?? 0;
+  const debrisWeight = shapeMix.debris ?? 0;
+  const total = dotWeight + sparkWeight + debrisWeight;
+
+  if (total <= 0) return "dot";
+
+  const roll = Math.random() * total;
+  if (roll < sparkWeight) return "spark";
+  if (roll < sparkWeight + debrisWeight) return "debris";
+  return "dot";
+}
 
 export class ParticleSystem {
   constructor() {
@@ -12,7 +26,7 @@ export class ParticleSystem {
   }
 
   spawnBurst(x, y, {
-    color = "#ff3b60",
+    color = PALETTE.ENEMY,
     count = 12,
     speedMin = 60,
     speedMax = 260,
@@ -20,12 +34,18 @@ export class ParticleSystem {
     sizeMin = 1.5,
     sizeMax = 4,
     drag = CONFIG.PARTICLES.DRAG,
-    glow = 12
+    glow = 12,
+    arcCenter = null,
+    arcSpread = Math.PI * 2,
+    shapeMix = { spark: 0.5, debris: 0.3, dot: 0.2 }
   } = {}) {
+    const center = arcCenter ?? randomRange(0, Math.PI * 2);
+
     for (let i = 0; i < count; i += 1) {
-      const angle = randomRange(0, Math.PI * 2);
+      const angle = center + randomRange(-arcSpread * 0.5, arcSpread * 0.5);
       const speed = randomRange(speedMin, speedMax);
       const direction = vectorFromAngle(angle, speed);
+      const shape = pickShape(shapeMix);
 
       this.particles.push(new Particle({
         x,
@@ -36,7 +56,10 @@ export class ParticleSystem {
         life: randomRange(life * 0.65, life * 1.25),
         color,
         drag,
-        glow
+        glow,
+        shape,
+        spin: randomRange(-9, 9),
+        rotation: randomRange(0, Math.PI * 2)
       }));
     }
   }
@@ -45,14 +68,31 @@ export class ParticleSystem {
     this.particles.push(new Particle({
       x,
       y,
-      vx: velocityX * 0.05 + randomRange(-20, 20),
-      vy: velocityY * 0.05 + randomRange(-20, 20),
-      size: randomRange(1, 2.2),
+      vx: velocityX * 0.04 + randomRange(-18, 18),
+      vy: velocityY * 0.04 + randomRange(-18, 18),
+      size: randomRange(0.9, 1.8),
       life: randomRange(0.08, 0.16),
       color,
       drag: 8,
-      glow: 8
+      glow: 7,
+      shape: "dot",
+      spin: randomRange(-3, 3),
+      rotation: randomRange(0, Math.PI * 2)
     }));
+  }
+
+  spawnImpact(x, y, color) {
+    this.spawnBurst(x, y, {
+      color,
+      count: 8,
+      speedMin: 70,
+      speedMax: 190,
+      life: CONFIG.PARTICLES.HIT_LIFETIME,
+      sizeMin: 0.9,
+      sizeMax: 2.4,
+      glow: 10,
+      shapeMix: { spark: 0.7, debris: 0.3, dot: 0 }
+    });
   }
 
   update(worldDt) {

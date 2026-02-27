@@ -1,3 +1,4 @@
+import { PALETTE } from "../config.js";
 import { normalize } from "../utils.js";
 
 export class Bullet {
@@ -39,8 +40,8 @@ export class Bullet {
 
     this.trail = [];
     this.trailTimer = 0;
-    this.trailInterval = 0.015;
-    this.maxTrailPoints = 10;
+    this.trailInterval = 0.014;
+    this.maxTrailPoints = 11;
   }
 
   update(dt) {
@@ -99,36 +100,54 @@ export class Bullet {
     if (this.dead) return;
 
     const direction = normalize(this.vx, this.vy);
-    const tailLength = this.fromEnemy ? 16 : 22;
+    const tailLength = this.fromEnemy ? 20 : 30;
     const tailX = this.x - direction.x * tailLength;
     const tailY = this.y - direction.y * tailLength;
+
+    const accent = this.fromEnemy ? "rgba(255, 42, 77, 0.75)" : this.color;
+    const core = this.fromEnemy ? "rgba(255, 42, 77, 0.95)" : PALETTE.WHITE;
 
     ctx.save();
 
     for (let i = 0; i < this.trail.length; i += 1) {
       const point = this.trail[i];
-      const alpha = Math.max(0, point.life / 0.12) * 0.5;
-      ctx.fillStyle = this.color;
-      ctx.globalAlpha = alpha;
+      const ratio = Math.max(0, point.life / 0.12);
+      ctx.globalAlpha = ratio * (this.fromEnemy ? 0.3 : 0.42);
+      ctx.fillStyle = accent;
       ctx.beginPath();
-      ctx.arc(point.x, point.y, this.radius * 0.75, 0, Math.PI * 2);
+      ctx.arc(point.x, point.y, this.radius * (0.55 + ratio * 0.3), 0, Math.PI * 2);
       ctx.fill();
     }
 
-    ctx.globalAlpha = 0.95;
-    ctx.strokeStyle = this.color;
-    ctx.lineWidth = this.fromEnemy ? 3 : 4;
+    const gradient = ctx.createLinearGradient(tailX, tailY, this.x, this.y);
+    gradient.addColorStop(0, this.fromEnemy ? "rgba(255, 42, 77, 0)" : "rgba(0, 245, 255, 0)");
+    gradient.addColorStop(0.6, this.fromEnemy ? "rgba(255, 42, 77, 0.38)" : "rgba(0, 245, 255, 0.42)");
+    gradient.addColorStop(1, this.fromEnemy ? "rgba(255, 42, 77, 1)" : "rgba(0, 245, 255, 1)");
+
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = gradient;
+    ctx.lineWidth = this.fromEnemy ? 3.2 : 4.1;
     ctx.lineCap = "round";
     ctx.shadowBlur = this.fromEnemy ? 8 : 12;
-    ctx.shadowColor = this.color;
+    ctx.shadowColor = accent;
     ctx.beginPath();
     ctx.moveTo(tailX, tailY);
     ctx.lineTo(this.x, this.y);
     ctx.stroke();
 
-    ctx.fillStyle = this.color;
+    ctx.strokeStyle = core;
+    ctx.lineWidth = this.fromEnemy ? 1.2 : 1.6;
+    ctx.shadowBlur = this.fromEnemy ? 5 : 7;
+    ctx.shadowColor = core;
     ctx.beginPath();
-    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+    ctx.moveTo(this.x - direction.x * (tailLength * 0.3), this.y - direction.y * (tailLength * 0.3));
+    ctx.lineTo(this.x, this.y);
+    ctx.stroke();
+
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = this.fromEnemy ? "rgba(120, 16, 34, 0.95)" : PALETTE.WHITE;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.radius * 0.75, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.restore();

@@ -1,10 +1,12 @@
-import { CONFIG, GAME_STATES } from "../config.js";
+import { CONFIG, GAME_STATES, PALETTE } from "../config.js";
+import { drawNeonLine, drawNeonText, drawRoundedRectPath } from "../render/neon.js";
 import { lerp } from "../utils.js";
 
 export class UIManager {
   constructor() {
     this.displayScore = 0;
     this.displayCombo = 1;
+    this.displayHp = 1;
     this.comboPulse = 0;
     this.lastCombo = 1;
   }
@@ -14,18 +16,43 @@ export class UIManager {
     this.displayScore = lerp(this.displayScore, game.score, scoreLerp);
     this.displayCombo = lerp(this.displayCombo, game.combo, scoreLerp);
 
+    if (game.player) {
+      const hpRatio = game.player.hp / game.player.maxHp;
+      this.displayHp = lerp(this.displayHp, hpRatio, 1 - Math.exp(-12 * dt));
+    }
+
     if (game.combo > this.lastCombo) {
       this.comboPulse = 1;
     }
 
     this.lastCombo = game.combo;
-    this.comboPulse = Math.max(0, this.comboPulse - dt * 2.4);
+    this.comboPulse = Math.max(0, this.comboPulse - dt * 2.8);
+  }
+
+  drawHudText(ctx, text, x, y, color, align = "left", size = 22, weight = 600, glow = CONFIG.VISUAL.HUD_TEXT_GLOW) {
+    drawNeonText(ctx, {
+      text,
+      x,
+      y,
+      color,
+      font: `${weight} ${size}px ${CONFIG.UI.FONT_FAMILY}`,
+      align,
+      baseline: "top",
+      glow,
+      letterSpacing: CONFIG.UI.LETTER_SPACING,
+      uppercase: true
+    });
   }
 
   render(ctx, game) {
     const state = game.state.get();
 
-    if (state === GAME_STATES.PLAYING || state === GAME_STATES.WAVE_CLEAR || state === GAME_STATES.UPGRADE || state === GAME_STATES.GAME_OVER) {
+    if (
+      state === GAME_STATES.PLAYING ||
+      state === GAME_STATES.WAVE_CLEAR ||
+      state === GAME_STATES.UPGRADE ||
+      state === GAME_STATES.GAME_OVER
+    ) {
       this.renderHud(ctx, game);
       this.renderWaveBanner(ctx, game);
     }
@@ -48,159 +75,241 @@ export class UIManager {
   }
 
   renderHud(ctx, game) {
+    if (!game.player) return;
+
     const wave = game.waveManager.currentWave;
+    const comboScale = 1 + this.comboPulse * 0.12;
     const comboText = `x${this.displayCombo.toFixed(1)} COMBO`;
-    const scoreText = `SCORE: ${Math.round(this.displayScore)}`;
-    const hpRatio = game.player.hp / game.player.maxHp;
+    const scoreText = `SCORE ${String(Math.round(this.displayScore)).padStart(5, "0")}`;
+
+    const topY = 20;
+    const leftX = 38;
+    const rightX = game.width - 38;
+    const centerX = game.width * 0.5;
+
+    this.drawHudText(ctx, `WAVE ${wave}`, leftX, topY, PALETTE.PLAYER, "left", 33, 700, 14);
 
     ctx.save();
-    ctx.font = `700 40px ${CONFIG.UI.FONT_FAMILY}`;
-    ctx.textBaseline = "top";
-
-    ctx.shadowBlur = 18;
-    ctx.shadowColor = "rgba(22, 179, 255, 0.95)";
-    ctx.fillStyle = "#43d5ff";
-    ctx.fillText(`WAVE ${wave}`, 34, 22);
-
-    ctx.textAlign = "center";
-    ctx.shadowColor = "rgba(246, 90, 255, 0.95)";
-    ctx.fillStyle = "#c677ff";
-    ctx.fillText(comboText, game.canvas.width * 0.5, 24);
-
-    ctx.textAlign = "right";
-    ctx.shadowColor = "rgba(24, 211, 255, 0.95)";
-    ctx.fillStyle = "#53e3ff";
-    ctx.fillText(scoreText, game.canvas.width - 36, 22);
-
+    ctx.translate(centerX, topY);
+    ctx.scale(comboScale, comboScale);
+    this.drawHudText(ctx, comboText, 0, 0, PALETTE.PURPLE, "center", 33, 700, 16);
     ctx.restore();
 
+    drawNeonLine(ctx, {
+      x1: centerX - 210,
+      y1: topY + 22,
+      x2: centerX - 122,
+      y2: topY + 22,
+      color: PALETTE.PLAYER,
+      width: 3,
+      glow: 8,
+      alpha: 0.78
+    });
+
+    drawNeonLine(ctx, {
+      x1: centerX + 122,
+      y1: topY + 22,
+      x2: centerX + 210,
+      y2: topY + 22,
+      color: PALETTE.ENEMY,
+      width: 3,
+      glow: 8,
+      alpha: 0.78
+    });
+
+    this.drawHudText(ctx, scoreText, rightX, topY, PALETTE.PLAYER, "right", 33, 700, 14);
+
+    const barX = 30;
+    const barY = game.height - 36;
+    const barWidth = 284;
+    const barHeight = 14;
+    const hpRatio = Math.max(0, Math.min(1, this.displayHp));
+
     ctx.save();
-    const barX = 28;
-    const barY = game.canvas.height - 32;
-    const barWidth = 260;
-    const barHeight = 12;
+    drawRoundedRectPath(ctx, barX, barY, barWidth, barHeight, 7);
+    ctx.fillStyle = "rgba(10, 16, 22, 0.92)";
+    ctx.fill();
 
-    ctx.fillStyle = "rgba(15, 20, 32, 0.9)";
-    ctx.fillRect(barX, barY, barWidth, barHeight);
-
-    ctx.fillStyle = hpRatio > 0.35 ? "#24d8ff" : "#ff5d79";
-    ctx.shadowBlur = 12;
-    ctx.shadowColor = ctx.fillStyle;
-    ctx.fillRect(barX, barY, barWidth * hpRatio, barHeight);
-
+    drawRoundedRectPath(ctx, barX, barY, barWidth * hpRatio, barHeight, 7);
+    ctx.fillStyle = PALETTE.HP;
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = PALETTE.HP;
+    ctx.fill();
     ctx.shadowBlur = 0;
-    ctx.font = `600 24px ${CONFIG.UI.FONT_FAMILY}`;
-    ctx.fillStyle = "#d9f7ff";
-    ctx.fillText(`HP ${Math.ceil(game.player.hp)}`, barX, barY - 26);
 
-    ctx.textAlign = "right";
-    ctx.font = `600 20px ${CONFIG.UI.FONT_FAMILY}`;
-    ctx.fillStyle = "#8ee9ff";
-    ctx.fillText(`HI ${game.highScore}`, game.canvas.width - 26, game.canvas.height - 34);
-
-    ctx.fillStyle = "#a7ebff";
-    ctx.fillText(`TIME ${game.timeController.getScale().toFixed(2)}x`, game.canvas.width - 26, game.canvas.height - 58);
+    this.drawHudText(ctx, `HP ${Math.ceil(game.player.hp)}`, barX, barY - 26, PALETTE.WHITE, "left", 18, 700, 8);
     ctx.restore();
+
+    this.drawHudText(
+      ctx,
+      `TIME ${game.timeController.getScale().toFixed(2)}X`,
+      game.width - 28,
+      game.height - 58,
+      "rgba(244, 251, 255, 0.85)",
+      "right",
+      15,
+      600,
+      2
+    );
+
+    this.drawHudText(
+      ctx,
+      `HI ${game.highScore}`,
+      game.width - 28,
+      game.height - 34,
+      "rgba(0, 245, 255, 0.65)",
+      "right",
+      16,
+      600,
+      4
+    );
   }
 
   renderWaveBanner(ctx, game) {
     const introRatio = game.waveManager.waveIntroTimer / CONFIG.TIMING.WAVE_INTRO_DURATION;
     if (introRatio <= 0) return;
 
-    const alpha = Math.sin(introRatio * Math.PI) * 0.85;
+    const t = 1 - introRatio;
+    const alpha = Math.sin(t * Math.PI) * 0.88;
+    const scale = 0.94 + Math.sin(t * Math.PI) * 0.08;
 
     ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.textAlign = "center";
-    ctx.font = `700 56px ${CONFIG.UI.FONT_FAMILY}`;
-    ctx.fillStyle = "#d483ff";
-    ctx.shadowBlur = 24;
-    ctx.shadowColor = CONFIG.UI.WAVE_GLOW;
-    ctx.fillText(`WAVE ${game.waveManager.currentWave}`, game.canvas.width * 0.5, game.canvas.height * 0.2);
+    ctx.translate(game.width * 0.5, game.height * 0.19);
+    ctx.scale(scale, scale);
+    drawNeonText(ctx, {
+      text: `WAVE ${game.waveManager.currentWave}`,
+      x: 0,
+      y: 0,
+      color: PALETTE.PURPLE,
+      font: `700 56px ${CONFIG.UI.FONT_FAMILY}`,
+      align: "center",
+      baseline: "top",
+      glow: 18,
+      letterSpacing: 2.2,
+      alpha,
+      uppercase: true
+    });
     ctx.restore();
   }
 
   renderMenu(ctx, game) {
+    const pulse = 0.55 + Math.sin(performance.now() * 0.006) * 0.25;
+
+    drawNeonText(ctx, {
+      text: "STILLPOINT",
+      x: game.width * 0.5,
+      y: game.height * 0.24,
+      color: PALETTE.PLAYER,
+      font: `700 108px ${CONFIG.UI.FONT_FAMILY}`,
+      align: "center",
+      baseline: "top",
+      glow: 24,
+      letterSpacing: 5,
+      alpha: 1,
+      uppercase: true
+    });
+
+    this.drawHudText(
+      ctx,
+      "TIME SLOWS TO 5% WHEN YOU STOP MOVING",
+      game.width * 0.5,
+      game.height * 0.45,
+      PALETTE.WHITE,
+      "center",
+      28,
+      600,
+      5
+    );
+
+    this.drawHudText(
+      ctx,
+      "WASD MOVE   MOUSE AIM + SHOOT   SPACE DASH",
+      game.width * 0.5,
+      game.height * 0.52,
+      PALETTE.PLAYER,
+      "center",
+      22,
+      600,
+      5
+    );
+
+    this.drawHudText(
+      ctx,
+      "CLICK OR PRESS ENTER",
+      game.width * 0.5,
+      game.height * 0.64,
+      PALETTE.PURPLE,
+      "center",
+      30,
+      700,
+      12
+    );
+
     ctx.save();
-    ctx.textAlign = "center";
-
-    const pulse = 0.6 + Math.sin(performance.now() * 0.005) * 0.2;
-
-    ctx.shadowBlur = 22;
-    ctx.shadowColor = CONFIG.UI.HUD_GLOW;
-    ctx.fillStyle = "#7de9ff";
-    ctx.font = `700 110px ${CONFIG.UI.FONT_FAMILY}`;
-    ctx.fillText("STILLPOINT", game.canvas.width * 0.5, game.canvas.height * 0.28);
-
-    ctx.font = `500 30px ${CONFIG.UI.FONT_FAMILY}`;
-    ctx.fillStyle = "#e8f8ff";
-    ctx.shadowBlur = 8;
-    ctx.fillText("Time slows to 5% when you stop moving.", game.canvas.width * 0.5, game.canvas.height * 0.48);
-
-    ctx.fillStyle = "#9ce8ff";
-    ctx.font = `500 25px ${CONFIG.UI.FONT_FAMILY}`;
-    ctx.fillText("WASD move  •  Mouse aim + shoot  •  Space dash", game.canvas.width * 0.5, game.canvas.height * 0.56);
-
     ctx.globalAlpha = pulse;
-    ctx.fillStyle = "#ff66d2";
-    ctx.shadowBlur = 14;
-    ctx.shadowColor = "#ff4bc6";
-    ctx.font = `700 30px ${CONFIG.UI.FONT_FAMILY}`;
-    ctx.fillText("CLICK OR PRESS ENTER", game.canvas.width * 0.5, game.canvas.height * 0.68);
-
+    drawNeonLine(ctx, {
+      x1: game.width * 0.35,
+      y1: game.height * 0.69,
+      x2: game.width * 0.65,
+      y2: game.height * 0.69,
+      color: PALETTE.PURPLE,
+      width: 2,
+      glow: 8,
+      alpha: 0.8
+    });
     ctx.restore();
   }
 
   renderWaveClear(ctx, game) {
     const ratio = game.waveClearTimer / CONFIG.TIMING.WAVE_CLEAR_DELAY;
-    const alpha = 1 - ratio * 0.5;
+    const alpha = 1 - ratio * 0.6;
 
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.textAlign = "center";
-    ctx.font = `700 64px ${CONFIG.UI.FONT_FAMILY}`;
-    ctx.fillStyle = "#54ebff";
-    ctx.shadowBlur = 18;
-    ctx.shadowColor = "#1de7ff";
-    ctx.fillText("WAVE CLEARED", game.canvas.width * 0.5, game.canvas.height * 0.45);
+    drawNeonText(ctx, {
+      text: "WAVE CLEARED",
+      x: game.width * 0.5,
+      y: game.height * 0.43,
+      color: PALETTE.PLAYER,
+      font: `700 62px ${CONFIG.UI.FONT_FAMILY}`,
+      align: "center",
+      baseline: "top",
+      glow: 16,
+      alpha,
+      letterSpacing: 2.2,
+      uppercase: true
+    });
 
-    ctx.font = `600 28px ${CONFIG.UI.FONT_FAMILY}`;
-    ctx.fillStyle = "#ffa8ef";
-    ctx.fillText("Choose an upgrade", game.canvas.width * 0.5, game.canvas.height * 0.54);
-    ctx.restore();
+    drawNeonText(ctx, {
+      text: "SELECT AN UPGRADE",
+      x: game.width * 0.5,
+      y: game.height * 0.52,
+      color: PALETTE.PURPLE,
+      font: `700 28px ${CONFIG.UI.FONT_FAMILY}`,
+      align: "center",
+      baseline: "top",
+      glow: 10,
+      alpha,
+      letterSpacing: 1.8,
+      uppercase: true
+    });
   }
 
   renderGameOver(ctx, game) {
     ctx.save();
-    ctx.fillStyle = "rgba(6, 9, 15, 0.72)";
-    ctx.fillRect(0, 0, game.canvas.width, game.canvas.height);
-
-    ctx.textAlign = "center";
-    ctx.shadowBlur = 18;
-    ctx.shadowColor = "#ff4f7f";
-    ctx.fillStyle = "#ff6085";
-    ctx.font = `700 84px ${CONFIG.UI.FONT_FAMILY}`;
-    ctx.fillText("GAME OVER", game.canvas.width * 0.5, game.canvas.height * 0.35);
-
-    ctx.shadowBlur = 10;
-    ctx.fillStyle = "#ffe1eb";
-    ctx.font = `600 34px ${CONFIG.UI.FONT_FAMILY}`;
-    ctx.fillText(`Final Score: ${Math.round(game.score)}`, game.canvas.width * 0.5, game.canvas.height * 0.48);
-
-    ctx.fillStyle = "#9be7ff";
-    ctx.fillText(`High Score: ${game.highScore}`, game.canvas.width * 0.5, game.canvas.height * 0.56);
-
-    ctx.fillStyle = "#ff78d7";
-    ctx.font = `700 30px ${CONFIG.UI.FONT_FAMILY}`;
-    ctx.fillText("Press R / Enter to restart", game.canvas.width * 0.5, game.canvas.height * 0.67);
+    ctx.fillStyle = "rgba(4, 8, 12, 0.78)";
+    ctx.fillRect(0, 0, game.width, game.height);
     ctx.restore();
+
+    this.drawHudText(ctx, "GAME OVER", game.width * 0.5, game.height * 0.33, PALETTE.ENEMY, "center", 82, 700, 18);
+    this.drawHudText(ctx, `FINAL SCORE ${Math.round(game.score)}`, game.width * 0.5, game.height * 0.48, PALETTE.WHITE, "center", 32, 600, 8);
+    this.drawHudText(ctx, `HIGH SCORE ${game.highScore}`, game.width * 0.5, game.height * 0.56, "rgba(0, 245, 255, 0.8)", "center", 28, 600, 8);
+    this.drawHudText(ctx, "PRESS R OR ENTER TO RESTART", game.width * 0.5, game.height * 0.66, PALETTE.PURPLE, "center", 28, 700, 12);
   }
 
   renderDamageFlash(ctx, game) {
     ctx.save();
     const alpha = game.damageFlashTimer / CONFIG.TIMING.DAMAGE_FLASH_DURATION;
-    ctx.fillStyle = `rgba(255, 48, 76, ${alpha * 0.2})`;
-    ctx.fillRect(0, 0, game.canvas.width, game.canvas.height);
+    ctx.fillStyle = `rgba(255, 42, 77, ${alpha * 0.18})`;
+    ctx.fillRect(0, 0, game.width, game.height);
     ctx.restore();
   }
 }

@@ -1,4 +1,4 @@
-import { CONFIG } from "../config.js";
+import { CONFIG, PALETTE } from "../config.js";
 import { distanceSquared } from "../utils.js";
 
 export class CollisionSystem {
@@ -25,7 +25,7 @@ export class CollisionSystem {
           }
 
           result.enemyHit = true;
-          result.hitPoints.push({ x: bullet.x, y: bullet.y, color: "#ff4869" });
+          result.hitPoints.push({ x: bullet.x, y: bullet.y, color: PALETTE.ENEMY });
 
           const killed = enemy.takeDamage(bullet.damage);
           if (killed) {
@@ -49,7 +49,7 @@ export class CollisionSystem {
         if (didDamage) {
           result.playerHit = true;
           result.damageTaken += bullet.damage;
-          result.hitPoints.push({ x: player.x, y: player.y, color: "#ff7a92" });
+          result.hitPoints.push({ x: player.x, y: player.y, color: PALETTE.ENEMY });
         }
       }
     }
@@ -64,7 +64,7 @@ export class CollisionSystem {
           if (didDamage) {
             result.playerHit = true;
             result.damageTaken += enemy.contactDamage;
-            result.hitPoints.push({ x: player.x, y: player.y, color: "#ff8a8a" });
+            result.hitPoints.push({ x: player.x, y: player.y, color: PALETTE.ENEMY });
             player.contactDamageCooldown = CONFIG.PLAYER.CONTACT_DAMAGE_COOLDOWN;
             enemy.emitContactKnockback(120);
           }

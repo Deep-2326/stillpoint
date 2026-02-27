@@ -1,4 +1,5 @@
-import { CONFIG } from "../config.js";
+import { CONFIG, PALETTE } from "../config.js";
+import { drawNeonCircle, drawNeonLine } from "../render/neon.js";
 import { angleTo, approach, clamp, length, normalize } from "../utils.js";
 
 export class Player {
@@ -24,6 +25,9 @@ export class Player {
 
     this.afterimages = [];
     this.afterimageTimer = 0;
+
+    this.motionTrail = [];
+    this.motionTrailTimer = 0;
 
     this.doubleShot = false;
     this.piercingBullets = false;
@@ -109,6 +113,16 @@ export class Player {
     this.x = clamp(this.x, this.radius, arenaWidth - this.radius);
     this.y = clamp(this.y, this.radius, arenaHeight - this.radius);
 
+    this.motionTrailTimer -= dt;
+    if (this.motionTrailTimer <= 0) {
+      this.motionTrailTimer = 0.025;
+      this.motionTrail.push({ x: this.x, y: this.y, angle: this.aimAngle });
+      const max = CONFIG.PLAYER.MOTION_BLUR_POINTS;
+      while (this.motionTrail.length > max) {
+        this.motionTrail.shift();
+      }
+    }
+
     if (input.isMouseDown(0) && this.shootCooldown <= 0) {
       this.shootCooldown = CONFIG.PLAYER.SHOOT_INTERVAL;
       this.fire(emitPlayerBullet);
@@ -132,7 +146,7 @@ export class Player {
         radius: CONFIG.PLAYER.BULLET_RADIUS,
         damage: CONFIG.PLAYER.BULLET_DAMAGE,
         lifetime: CONFIG.PLAYER.BULLET_LIFETIME,
-        color: "#1de7ff",
+        color: PALETTE.PLAYER,
         fromEnemy: false,
         pierceCount
       });
@@ -167,64 +181,131 @@ export class Player {
     return true;
   }
 
-  render(ctx) {
-    for (const ghost of this.afterimages) {
-      const alpha = ghost.life / ghost.maxLife;
-      ctx.save();
-      ctx.translate(ghost.x, ghost.y);
-      ctx.rotate(ghost.angle);
-      ctx.globalAlpha = alpha * 0.42;
-      ctx.fillStyle = "#1de7ff";
-      ctx.shadowBlur = 18;
-      ctx.shadowColor = "#1de7ff";
-      ctx.beginPath();
-      ctx.arc(0, 0, this.radius * 0.9, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-    }
+  renderDashStreak(ctx) {
+    const heading = this.getSpeed() > 0.1 ? Math.atan2(this.vy, this.vx) : this.aimAngle;
 
     ctx.save();
     ctx.translate(this.x, this.y);
-    ctx.rotate(this.aimAngle);
+    ctx.rotate(heading);
 
-    ctx.shadowBlur = 24;
-    ctx.shadowColor = "#26dbff";
-    ctx.fillStyle = "#14c5f8";
-    ctx.beginPath();
-    ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
-    ctx.fill();
+    for (let i = 0; i < 3; i += 1) {
+      const alpha = 0.34 - i * 0.1;
+      const length = 30 + i * 18;
+      const width = 8 + i * 4;
+      const offset = this.radius + i * 3;
 
-    ctx.fillStyle = "#baf6ff";
-    ctx.globalAlpha = 0.95;
-    ctx.beginPath();
-    ctx.arc(5, -5, this.radius * 0.2, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.globalAlpha = 1;
-    ctx.strokeStyle = "#d7ffff";
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(4, 0);
-    ctx.lineTo(this.radius + 10, 0);
-    ctx.stroke();
-
-    if (this.damageFlash > 0) {
-      ctx.globalAlpha = this.damageFlash * 0.75;
-      ctx.fillStyle = "#ff9bb0";
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = PALETTE.PLAYER;
       ctx.beginPath();
-      ctx.arc(0, 0, this.radius + 2, 0, Math.PI * 2);
+      ctx.moveTo(-offset - length, 0);
+      ctx.lineTo(-offset, -width);
+      ctx.lineTo(-offset, width);
+      ctx.closePath();
       ctx.fill();
     }
 
-    if (this.dashCooldownTimer <= 0) {
-      ctx.globalAlpha = 0.7;
-      ctx.strokeStyle = "#57f2ff";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(0, 0, this.radius + 6, -Math.PI * 0.2, Math.PI * 0.2);
-      ctx.stroke();
+    ctx.restore();
+  }
+
+  render(ctx) {
+    for (let i = 0; i < this.motionTrail.length; i += 1) {
+      const ghost = this.motionTrail[i];
+      const ratio = (i + 1) / this.motionTrail.length;
+      drawNeonCircle(ctx, {
+        x: ghost.x,
+        y: ghost.y,
+        radius: this.radius * (0.5 + ratio * 0.25),
+        color: PALETTE.PLAYER,
+        glow: 10,
+        alpha: 0.06 + ratio * 0.08
+      });
     }
 
-    ctx.restore();
+    for (const ghost of this.afterimages) {
+      const alpha = ghost.life / ghost.maxLife;
+      drawNeonCircle(ctx, {
+        x: ghost.x,
+        y: ghost.y,
+        radius: this.radius * 0.95,
+        color: PALETTE.PLAYER,
+        glow: 16,
+        alpha: alpha * 0.24
+      });
+    }
+
+    if (this.isDashing()) {
+      this.renderDashStreak(ctx);
+    }
+
+    drawNeonCircle(ctx, {
+      x: this.x,
+      y: this.y,
+      radius: this.radius + 3,
+      color: PALETTE.PLAYER,
+      glow: CONFIG.VISUAL.PLAYER_GLOW,
+      alpha: 0.22
+    });
+
+    drawNeonCircle(ctx, {
+      x: this.x,
+      y: this.y,
+      radius: this.radius,
+      color: PALETTE.PLAYER,
+      glow: CONFIG.VISUAL.PLAYER_CORE_GLOW,
+      alpha: 0.95
+    });
+
+    drawNeonCircle(ctx, {
+      x: this.x - Math.cos(this.aimAngle) * 3,
+      y: this.y - Math.sin(this.aimAngle) * 3,
+      radius: this.radius * 0.56,
+      color: "rgba(6, 20, 26, 0.7)",
+      glow: 0,
+      alpha: 1
+    });
+
+    const fx = this.x + Math.cos(this.aimAngle) * (this.radius + 9);
+    const fy = this.y + Math.sin(this.aimAngle) * (this.radius + 9);
+    drawNeonLine(ctx, {
+      x1: this.x + Math.cos(this.aimAngle) * 6,
+      y1: this.y + Math.sin(this.aimAngle) * 6,
+      x2: fx,
+      y2: fy,
+      color: PALETTE.WHITE,
+      width: 2.4,
+      glow: 8,
+      alpha: 0.95
+    });
+
+    drawNeonCircle(ctx, {
+      x: this.x + Math.cos(this.aimAngle) * 4,
+      y: this.y + Math.sin(this.aimAngle) * 4,
+      radius: this.radius * 0.2,
+      color: PALETTE.WHITE,
+      glow: 6,
+      alpha: 0.88
+    });
+
+    if (this.damageFlash > 0) {
+      drawNeonCircle(ctx, {
+        x: this.x,
+        y: this.y,
+        radius: this.radius + 2,
+        color: PALETTE.WHITE,
+        glow: 10,
+        alpha: this.damageFlash * 0.4
+      });
+    }
+
+    if (this.dashCooldownTimer <= 0) {
+      ctx.save();
+      ctx.strokeStyle = PALETTE.PLAYER;
+      ctx.lineWidth = 1.6;
+      ctx.globalAlpha = 0.45;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.radius + 7, -Math.PI * 0.18, Math.PI * 0.18);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 }

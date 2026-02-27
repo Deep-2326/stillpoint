@@ -1,4 +1,4 @@
-import { CONFIG, ENEMY_TYPES } from "../config.js";
+import { CONFIG, ENEMY_TYPES, PALETTE } from "../config.js";
 import { angleTo, clamp, normalize, randomRange, vectorFromAngle } from "../utils.js";
 
 let NEXT_ENEMY_ID = 1;
@@ -16,6 +16,35 @@ function drawPolygon(ctx, sides, radius) {
       ctx.lineTo(x, y);
     }
   }
+  ctx.closePath();
+}
+
+function drawShape(ctx, type, radius) {
+  if (type === ENEMY_TYPES.CHASER) {
+    drawPolygon(ctx, 3, radius);
+    return;
+  }
+
+  if (type === ENEMY_TYPES.SHOOTER) {
+    drawPolygon(ctx, 4, radius);
+    return;
+  }
+
+  if (type === ENEMY_TYPES.BURST) {
+    drawPolygon(ctx, 6, radius);
+    return;
+  }
+
+  if (type === ENEMY_TYPES.MINIBOSS) {
+    drawPolygon(ctx, 8, radius);
+    return;
+  }
+
+  ctx.beginPath();
+  ctx.moveTo(0, -radius);
+  ctx.lineTo(radius * 0.72, 0);
+  ctx.lineTo(0, radius);
+  ctx.lineTo(-radius * 0.72, 0);
   ctx.closePath();
 }
 
@@ -188,6 +217,14 @@ export class Enemy {
   render(ctx) {
     if (this.dead) return;
 
+    const shadowAlpha = this.type === ENEMY_TYPES.MINIBOSS ? 0.34 : 0.24;
+    ctx.save();
+    ctx.fillStyle = `rgba(0, 0, 0, ${shadowAlpha})`;
+    ctx.beginPath();
+    ctx.ellipse(this.x, this.y + this.radius * 0.62, this.radius * 0.92, this.radius * 0.45, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
     ctx.save();
     ctx.translate(this.x, this.y);
 
@@ -195,70 +232,39 @@ export class Enemy {
     if (this.type !== ENEMY_TYPES.MINIBOSS) {
       ctx.rotate(heading + Math.PI / 2);
     } else {
-      ctx.rotate(this.behaviorTime * 0.15);
+      ctx.rotate(this.behaviorTime * 0.2);
     }
 
-    const fill = "#ff2f5d";
-    const stroke = "#ff7b92";
+    const pulse = (Math.sin(this.behaviorTime * 2.8) + 1) * 0.5;
+    const glow = this.type === ENEMY_TYPES.MINIBOSS
+      ? CONFIG.VISUAL.ENEMY_MINIBOSS_GLOW + pulse * 7
+      : CONFIG.VISUAL.ENEMY_GLOW;
 
-    ctx.shadowBlur = this.type === ENEMY_TYPES.MINIBOSS ? 24 : 14;
-    ctx.shadowColor = fill;
-    ctx.fillStyle = fill;
-    ctx.strokeStyle = stroke;
-    ctx.lineWidth = this.type === ENEMY_TYPES.MINIBOSS ? 3 : 2;
+    ctx.fillStyle = PALETTE.ENEMY;
+    ctx.shadowBlur = glow;
+    ctx.shadowColor = PALETTE.ENEMY;
+    drawShape(ctx, this.type, this.radius);
+    ctx.fill();
 
-    if (this.type === ENEMY_TYPES.CHASER) {
-      drawPolygon(ctx, 3, this.radius);
-      ctx.fill();
-    } else if (this.type === ENEMY_TYPES.SHOOTER) {
-      drawPolygon(ctx, 4, this.radius);
-      ctx.fill();
-      ctx.stroke();
-    } else if (this.type === ENEMY_TYPES.BURST) {
-      drawPolygon(ctx, 6, this.radius);
-      ctx.fill();
-      ctx.stroke();
-    } else if (this.type === ENEMY_TYPES.FAST) {
-      ctx.beginPath();
-      ctx.moveTo(0, -this.radius);
-      ctx.lineTo(this.radius * 0.7, 0);
-      ctx.lineTo(0, this.radius);
-      ctx.lineTo(-this.radius * 0.7, 0);
-      ctx.closePath();
-      ctx.fill();
-    } else if (this.type === ENEMY_TYPES.MINIBOSS) {
-      drawPolygon(ctx, 8, this.radius);
-      ctx.fill();
-      ctx.stroke();
-      ctx.fillStyle = "#ff8ea1";
-      ctx.beginPath();
-      ctx.arc(0, 0, this.radius * 0.35, 0, Math.PI * 2);
-      ctx.fill();
-    }
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "rgba(40, 8, 15, 0.48)";
+    drawShape(ctx, this.type, this.radius * 0.62);
+    ctx.fill();
 
     if (this.flash > 0) {
       ctx.globalAlpha = this.flash * 0.6;
-      ctx.fillStyle = "#ffe6ec";
-      if (this.type === ENEMY_TYPES.FAST) {
-        ctx.beginPath();
-        ctx.moveTo(0, -this.radius);
-        ctx.lineTo(this.radius * 0.7, 0);
-        ctx.lineTo(0, this.radius);
-        ctx.lineTo(-this.radius * 0.7, 0);
-        ctx.closePath();
-      } else {
-        drawPolygon(ctx, this.type === ENEMY_TYPES.MINIBOSS ? 8 : this.type === ENEMY_TYPES.BURST ? 6 : this.type === ENEMY_TYPES.SHOOTER ? 4 : 3, this.radius);
-      }
+      ctx.fillStyle = PALETTE.WHITE;
+      drawShape(ctx, this.type, this.radius * 1.02);
       ctx.fill();
     }
 
     if (this.type === ENEMY_TYPES.MINIBOSS) {
       const hpRatio = Math.max(0, this.hp / this.maxHp);
-      ctx.rotate(-this.behaviorTime * 0.15);
-      ctx.translate(0, this.radius + 12);
-      ctx.fillStyle = "rgba(22, 14, 20, 0.85)";
+      ctx.rotate(-this.behaviorTime * 0.2);
+      ctx.translate(0, this.radius + 14);
+      ctx.fillStyle = "rgba(12, 10, 14, 0.9)";
       ctx.fillRect(-this.radius, -4, this.radius * 2, 8);
-      ctx.fillStyle = "#ff5f7b";
+      ctx.fillStyle = PALETTE.ENEMY;
       ctx.fillRect(-this.radius, -4, this.radius * 2 * hpRatio, 8);
     }
 

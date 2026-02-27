@@ -1,7 +1,8 @@
-import { CONFIG, GAME_STATES } from "../config.js";
+import { CONFIG, ENEMY_TYPES, GAME_STATES, PALETTE } from "../config.js";
+import { drawNeonLine } from "../render/neon.js";
 import { Bullet } from "../entities/Bullet.js";
 import { Player } from "../entities/Player.js";
-import { approach, randomRange } from "../utils.js";
+import { clamp, randomRange } from "../utils.js";
 import { CollisionSystem } from "../systems/CollisionSystem.js";
 import { EnemyManager } from "../systems/EnemyManager.js";
 import { ParticleSystem } from "../systems/ParticleSystem.js";
@@ -19,15 +20,17 @@ export class Game {
   constructor(canvas) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
-    this.canvas.width = CONFIG.CANVAS.WIDTH;
-    this.canvas.height = CONFIG.CANVAS.HEIGHT;
+
+    this.width = CONFIG.CANVAS.WIDTH;
+    this.height = CONFIG.CANVAS.HEIGHT;
+    this.dpr = 1;
 
     this.state = new StateManager(GAME_STATES.MENU);
     this.input = new Input(canvas);
     this.timeController = new TimeController();
 
     this.waveManager = new WaveManager();
-    this.enemyManager = new EnemyManager(this.canvas.width, this.canvas.height);
+    this.enemyManager = new EnemyManager(this.width, this.height);
     this.collisionSystem = new CollisionSystem();
     this.upgradeManager = new UpgradeManager();
     this.particleSystem = new ParticleSystem();
@@ -48,6 +51,7 @@ export class Game {
     this.damageFlashTimer = 0;
 
     this.shakeIntensity = 0;
+    this.shakeTimer = 0;
     this.shakeX = 0;
     this.shakeY = 0;
 
@@ -55,6 +59,23 @@ export class Game {
     this.lastTime = 0;
 
     this.boundFrame = (timeStamp) => this.frame(timeStamp);
+    this.boundResize = () => this.resizeCanvas();
+
+    this.resizeCanvas();
+    window.addEventListener("resize", this.boundResize);
+  }
+
+  resizeCanvas() {
+    const dpr = clamp(window.devicePixelRatio || 1, 1, CONFIG.CANVAS.MAX_DPR);
+    this.dpr = dpr;
+
+    this.canvas.width = Math.round(this.width * this.dpr);
+    this.canvas.height = Math.round(this.height * this.dpr);
+
+    this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    this.ctx.imageSmoothingEnabled = true;
+
+    this.input.setLogicalSize(this.width, this.height);
   }
 
   start() {
@@ -74,7 +95,7 @@ export class Game {
     this.lastTime = timeStamp;
 
     this.update(dt);
-    this.render(dt);
+    this.render();
 
     this.input.endFrame();
     requestAnimationFrame(this.boundFrame);
@@ -96,6 +117,7 @@ export class Game {
     this.updateShake(dt);
     this.damageFlashTimer = Math.max(0, this.damageFlashTimer - dt);
     this.ui.update(dt, this);
+    this.updateCursor();
   }
 
   updateMenu(dt) {
@@ -106,7 +128,7 @@ export class Game {
   }
 
   startRun() {
-    this.player = new Player(this.canvas.width * 0.5, this.canvas.height * 0.5);
+    this.player = new Player(this.width * 0.5, this.height * 0.5);
     this.playerBullets.length = 0;
     this.enemyBullets.length = 0;
 
@@ -123,6 +145,7 @@ export class Game {
     this.permanentUpgrades.clear();
 
     this.shakeIntensity = 0;
+    this.shakeTimer = 0;
     this.shakeX = 0;
     this.shakeY = 0;
 
@@ -134,8 +157,8 @@ export class Game {
     this.player.update(
       dt,
       this.input,
-      this.canvas.width,
-      this.canvas.height,
+      this.width,
+      this.height,
       (bulletData) => this.spawnPlayerBullet(bulletData)
     );
 
@@ -191,14 +214,14 @@ export class Game {
 
     if (this.waveClearTimer <= 0) {
       const choices = this.upgradeManager.getChoices(this.player, 3);
-      this.upgradeScreen.open(choices, this.canvas.width, this.canvas.height);
+      this.upgradeScreen.open(choices, this.width, this.height);
       this.state.set(GAME_STATES.UPGRADE);
     }
   }
 
   updateUpgrade(dt) {
     this.particleSystem.update(dt * 0.35);
-    const selection = this.upgradeScreen.update(this.input);
+    const selection = this.upgradeScreen.update(this.input, dt, this.canvas);
 
     if (selection) {
       this.upgradeManager.applyUpgrade(selection.id, this.player, this);
@@ -215,18 +238,34 @@ export class Game {
     }
   }
 
+  updateCursor() {
+    if (this.state.is(GAME_STATES.UPGRADE)) {
+      this.canvas.style.cursor = this.upgradeScreen.isHovering() ? "pointer" : "default";
+      return;
+    }
+
+    if (this.state.is(GAME_STATES.MENU) || this.state.is(GAME_STATES.GAME_OVER)) {
+      this.canvas.style.cursor = "pointer";
+      return;
+    }
+
+    this.canvas.style.cursor = "crosshair";
+  }
+
   spawnPlayerBullet(bulletData) {
     this.playerBullets.push(new Bullet(bulletData));
+
     this.particleSystem.spawnBurst(bulletData.x, bulletData.y, {
-      color: "#2deaff",
+      color: PALETTE.PLAYER,
       count: CONFIG.PARTICLES.PLAYER_SHOT_COUNT,
-      speedMin: 20,
-      speedMax: 100,
+      speedMin: 30,
+      speedMax: 120,
       life: 0.12,
       sizeMin: 0.8,
       sizeMax: 1.8,
       drag: 10,
-      glow: 10
+      glow: 8,
+      shapeMix: { spark: 0.7, debris: 0.3 }
     });
   }
 
@@ -239,7 +278,7 @@ export class Game {
       radius: CONFIG.ENEMIES.BULLET.RADIUS,
       damage: CONFIG.ENEMIES.BULLET.DAMAGE,
       lifetime: CONFIG.ENEMIES.BULLET.LIFETIME,
-      color: "#ff4867",
+      color: PALETTE.ENEMY,
       fromEnemy: true,
       pierceCount: 0
     }));
@@ -248,15 +287,16 @@ export class Game {
       enemy.x + Math.cos(angle) * (enemy.radius + 6),
       enemy.y + Math.sin(angle) * (enemy.radius + 6),
       {
-        color: "#ff4264",
+        color: PALETTE.ENEMY,
         count: CONFIG.PARTICLES.ENEMY_SHOT_COUNT,
-        speedMin: 20,
+        speedMin: 30,
         speedMax: 90,
         life: 0.14,
         sizeMin: 0.8,
-        sizeMax: 1.9,
+        sizeMax: 1.8,
         drag: 10,
-        glow: 9
+        glow: 8,
+        shapeMix: { spark: 0.6, debris: 0.4 }
       }
     );
   }
@@ -265,23 +305,23 @@ export class Game {
     for (const bullet of this.playerBullets) {
       bullet.update(playerDt);
       if (!bullet.dead) {
-        this.particleSystem.spawnTrail(bullet.x, bullet.y, "#39e9ff", bullet.vx, bullet.vy);
+        this.particleSystem.spawnTrail(bullet.x, bullet.y, PALETTE.PLAYER, bullet.vx, bullet.vy);
       }
     }
 
     for (const bullet of this.enemyBullets) {
       bullet.update(worldDt);
       if (!bullet.dead) {
-        this.particleSystem.spawnTrail(bullet.x, bullet.y, "#ff4f70", bullet.vx, bullet.vy);
+        this.particleSystem.spawnTrail(bullet.x, bullet.y, PALETTE.ENEMY, bullet.vx, bullet.vy);
       }
     }
 
     this.playerBullets = this.playerBullets.filter(
-      (bullet) => !bullet.dead && !bullet.isOutOfBounds(this.canvas.width, this.canvas.height)
+      (bullet) => !bullet.dead && !bullet.isOutOfBounds(this.width, this.height)
     );
 
     this.enemyBullets = this.enemyBullets.filter(
-      (bullet) => !bullet.dead && !bullet.isOutOfBounds(this.canvas.width, this.canvas.height)
+      (bullet) => !bullet.dead && !bullet.isOutOfBounds(this.width, this.height)
     );
   }
 
@@ -289,16 +329,7 @@ export class Game {
     if (result.enemyHit) {
       this.addShake(CONFIG.CAMERA.HIT_SHAKE);
       for (const point of result.hitPoints) {
-        this.particleSystem.spawnBurst(point.x, point.y, {
-          color: point.color,
-          count: 4,
-          speedMin: 40,
-          speedMax: 150,
-          life: CONFIG.PARTICLES.HIT_LIFETIME,
-          sizeMin: 0.9,
-          sizeMax: 2.2,
-          glow: 10
-        });
+        this.particleSystem.spawnImpact(point.x, point.y, point.color);
       }
     }
 
@@ -315,14 +346,17 @@ export class Game {
 
   onEnemyKilled(enemy) {
     this.particleSystem.spawnBurst(enemy.x, enemy.y, {
-      color: "#ff365f",
-      count: enemy.type === "miniboss" ? CONFIG.PARTICLES.ENEMY_DEATH_COUNT * 3 : CONFIG.PARTICLES.ENEMY_DEATH_COUNT,
-      speedMin: 80,
-      speedMax: enemy.type === "miniboss" ? 360 : 260,
-      life: enemy.type === "miniboss" ? 0.85 : 0.52,
+      color: PALETTE.ENEMY,
+      count: enemy.type === ENEMY_TYPES.MINIBOSS
+        ? CONFIG.PARTICLES.ENEMY_DEATH_COUNT * 3
+        : CONFIG.PARTICLES.ENEMY_DEATH_COUNT,
+      speedMin: 90,
+      speedMax: enemy.type === ENEMY_TYPES.MINIBOSS ? 360 : 270,
+      life: enemy.type === ENEMY_TYPES.MINIBOSS ? 0.8 : 0.5,
       sizeMin: 1.2,
-      sizeMax: enemy.type === "miniboss" ? 5.2 : 3.4,
-      glow: 14
+      sizeMax: enemy.type === ENEMY_TYPES.MINIBOSS ? 5 : 3.2,
+      glow: 12,
+      shapeMix: { spark: 0.65, debris: 0.35 }
     });
 
     const gain = enemy.scoreValue * this.combo;
@@ -332,7 +366,7 @@ export class Game {
     this.combo = Math.min(this.combo, 12);
     this.comboTimer = CONFIG.SCORING.COMBO_TIMEOUT;
 
-    this.addShake(enemy.type === "miniboss" ? CONFIG.CAMERA.DAMAGE_SHAKE : CONFIG.CAMERA.HIT_SHAKE + 1);
+    this.addShake(enemy.type === ENEMY_TYPES.MINIBOSS ? CONFIG.CAMERA.DAMAGE_SHAKE : CONFIG.CAMERA.HIT_SHAKE + 0.8);
   }
 
   triggerGameOver() {
@@ -346,27 +380,30 @@ export class Game {
   }
 
   addShake(amount) {
-    this.shakeIntensity = Math.max(this.shakeIntensity, amount);
+    this.shakeIntensity = Math.min(CONFIG.CAMERA.MAX_SHAKE, Math.max(this.shakeIntensity, amount));
+    this.shakeTimer = CONFIG.CAMERA.SHAKE_DURATION;
   }
 
   updateShake(dt) {
-    this.shakeIntensity = approach(this.shakeIntensity, 0, CONFIG.TIMING.SHAKE_DAMPING * dt);
-
-    if (this.shakeIntensity <= 0.01) {
+    if (this.shakeTimer <= 0) {
       this.shakeIntensity = 0;
       this.shakeX = 0;
       this.shakeY = 0;
       return;
     }
 
-    this.shakeX = randomRange(-this.shakeIntensity, this.shakeIntensity);
-    this.shakeY = randomRange(-this.shakeIntensity, this.shakeIntensity);
+    this.shakeTimer = Math.max(0, this.shakeTimer - dt);
+    const ratio = this.shakeTimer / CONFIG.CAMERA.SHAKE_DURATION;
+    const amplitude = this.shakeIntensity * ratio * ratio;
+
+    this.shakeX = randomRange(-amplitude, amplitude);
+    this.shakeY = randomRange(-amplitude, amplitude);
   }
 
   render() {
     const { ctx } = this;
 
-    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    ctx.clearRect(0, 0, this.width, this.height);
     this.drawBackground();
     this.drawGrid();
 
@@ -390,54 +427,82 @@ export class Game {
 
     ctx.restore();
 
+    this.drawVignette();
     this.ui.render(ctx, this);
 
     if (this.state.is(GAME_STATES.UPGRADE)) {
-      this.upgradeScreen.render(ctx, this.canvas.width, this.canvas.height);
+      this.upgradeScreen.render(ctx, this.width, this.height);
     }
   }
 
   drawBackground() {
     const gradient = this.ctx.createRadialGradient(
-      this.canvas.width * 0.5,
-      this.canvas.height * 0.5,
-      150,
-      this.canvas.width * 0.5,
-      this.canvas.height * 0.5,
-      this.canvas.width * 0.68
+      this.width * 0.5,
+      this.height * 0.5,
+      Math.min(this.width, this.height) * 0.14,
+      this.width * 0.5,
+      this.height * 0.5,
+      this.width * 0.72
     );
 
-    gradient.addColorStop(0, "#121929");
-    gradient.addColorStop(1, CONFIG.CANVAS.BACKGROUND);
+    gradient.addColorStop(0, PALETTE.BG_CENTER);
+    gradient.addColorStop(1, PALETTE.BG_EDGE);
 
     this.ctx.fillStyle = gradient;
-    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    this.ctx.fillRect(0, 0, this.width, this.height);
   }
 
   drawGrid() {
     const size = CONFIG.WORLD.GRID_SIZE;
+    const centerX = this.width * 0.5;
+    const centerY = this.height * 0.5;
 
-    this.ctx.save();
-    this.ctx.strokeStyle = "rgba(80, 100, 150, 0.32)";
-    this.ctx.lineWidth = CONFIG.WORLD.GRID_LINE_WIDTH;
-
-    for (let x = 0; x <= this.canvas.width; x += size) {
-      this.ctx.globalAlpha = (x / size) % 2 === 0 ? CONFIG.WORLD.GRID_ALPHA : CONFIG.WORLD.GRID_ALPHA * 0.46;
-      this.ctx.beginPath();
-      this.ctx.moveTo(x, 0);
-      this.ctx.lineTo(x, this.canvas.height);
-      this.ctx.stroke();
+    for (let x = 0; x <= this.width; x += size) {
+      const edgeFade = 1 - Math.abs(x - centerX) / centerX;
+      const alpha = CONFIG.WORLD.GRID_ALPHA * (0.28 + edgeFade * 0.72);
+      drawNeonLine(this.ctx, {
+        x1: x,
+        y1: 0,
+        x2: x,
+        y2: this.height,
+        color: `rgba(0, 234, 255, ${alpha.toFixed(4)})`,
+        width: CONFIG.WORLD.GRID_LINE_WIDTH,
+        glow: 2,
+        alpha: 1
+      });
     }
 
-    for (let y = 0; y <= this.canvas.height; y += size) {
-      this.ctx.globalAlpha = (y / size) % 2 === 0 ? CONFIG.WORLD.GRID_ALPHA : CONFIG.WORLD.GRID_ALPHA * 0.46;
-      this.ctx.beginPath();
-      this.ctx.moveTo(0, y);
-      this.ctx.lineTo(this.canvas.width, y);
-      this.ctx.stroke();
+    for (let y = 0; y <= this.height; y += size) {
+      const verticalFade = 1 - Math.abs(y - centerY) / centerY;
+      const alpha = CONFIG.WORLD.GRID_ALPHA * (0.2 + verticalFade * 0.8);
+      drawNeonLine(this.ctx, {
+        x1: 0,
+        y1: y,
+        x2: this.width,
+        y2: y,
+        color: `rgba(0, 234, 255, ${alpha.toFixed(4)})`,
+        width: CONFIG.WORLD.GRID_LINE_WIDTH,
+        glow: 2,
+        alpha: 1
+      });
     }
+  }
 
-    this.ctx.restore();
+  drawVignette() {
+    const vignette = this.ctx.createRadialGradient(
+      this.width * 0.5,
+      this.height * 0.5,
+      Math.min(this.width, this.height) * 0.34,
+      this.width * 0.5,
+      this.height * 0.5,
+      Math.max(this.width, this.height) * 0.72
+    );
+
+    vignette.addColorStop(0, "rgba(10, 10, 18, 0)");
+    vignette.addColorStop(1, `rgba(10, 10, 18, ${CONFIG.WORLD.VIGNETTE_OPACITY})`);
+
+    this.ctx.fillStyle = vignette;
+    this.ctx.fillRect(0, 0, this.width, this.height);
   }
 
   loadHighScore() {
