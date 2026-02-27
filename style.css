@@ -1,0 +1,58 @@
+@import url("https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&display=swap");
+
+:root {
+  --bg: #0b0d13;
+  --panel: #101521;
+  --cyan: #1de7ff;
+  --blue: #2d8bff;
+  --pink: #ff4fcd;
+  --danger: #ff4f6f;
+  --text: #d9ecff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(24, 77, 160, 0.25), transparent 45%),
+    radial-gradient(circle at 80% 80%, rgba(152, 36, 122, 0.22), transparent 48%),
+    linear-gradient(145deg, #05070d, var(--bg) 50%, #06070f);
+  color: var(--text);
+  font-family: "Rajdhani", sans-serif;
+}
+
+.app-shell {
+  position: relative;
+  width: min(95vw, 1280px);
+  aspect-ratio: 16 / 9;
+  border-radius: 18px;
+  padding: 12px;
+  background: linear-gradient(150deg, rgba(16, 22, 34, 0.95), rgba(7, 10, 16, 0.96));
+  box-shadow:
+    0 0 0 1px rgba(36, 95, 132, 0.32),
+    0 28px 72px rgba(0, 0, 0, 0.6),
+    inset 0 0 30px rgba(19, 35, 58, 0.6);
+}
+
+#game-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border-radius: 12px;
+  background: #0f0f14;
+  box-shadow:
+    inset 0 0 42px rgba(50, 97, 178, 0.18),
+    0 0 42px rgba(0, 25, 64, 0.35);
+}
